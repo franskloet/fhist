@@ -41,6 +41,7 @@ type Model struct {
 	FilteredIndexes    []int
 	SelectedIndex      int
 	ContextRadius      int // N commands before and after hit
+	CommandOffset      int // Horizontal scroll offset for long command lines
 	SearchMode         SearchMode
 	TextInput          textinput.Model
 	Styles             Styles
@@ -69,7 +70,8 @@ func NewModel(store *history.HistoryStore, initialQuery string, contextRadius in
 	m := Model{
 		Store:         store,
 		ContextRadius: contextRadius,
-		SearchMode:    ModeContains, // Default to hstr-style Substring search!
+		CommandOffset: 0,
+		SearchMode:    ModeContains,
 		TextInput:     ti,
 		Styles:        DefaultStyles(),
 		SelectedIndex: 0,
@@ -88,7 +90,6 @@ func (m *Model) UpdateCurrentItems() {
 func (m *Model) ApplyFilter() {
 	query := strings.TrimSpace(m.TextInput.Value())
 	if query == "" {
-		// Return all items in reverse chronological order (most recent first)
 		m.FilteredIndexes = make([]int, len(m.CurrentItems))
 		n := len(m.CurrentItems)
 		for i := 0; i < n; i++ {
@@ -105,7 +106,6 @@ func (m *Model) ApplyFilter() {
 
 	switch m.SearchMode {
 	case ModeContains:
-		// hstr / fzf style smart tokenized substring search
 		queryLower := strings.ToLower(query)
 		tokens := strings.Fields(queryLower)
 
@@ -170,7 +170,7 @@ func max(a, b int) int {
 }
 
 func min(a, b int) int {
-	if a > b {
+	if a < b {
 		return a
 	}
 	return b

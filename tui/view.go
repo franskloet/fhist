@@ -57,13 +57,19 @@ func (m Model) View() string {
 		notification = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1")).Bold(true).Render(" " + m.CopiedNotification)
 	}
 
+	scrollHint := ""
+	if m.CommandOffset > 0 {
+		scrollHint = lipgloss.NewStyle().Foreground(lipgloss.Color("#F9E2AF")).Bold(true).Render(fmt.Sprintf(" [Offset +%d] ", m.CommandOffset))
+	}
+
 	helpBar := fmt.Sprintf(
-		" %s %s  %s %s  %s %s  %s %s  %s %s%s",
+		" %s %s  %s %s  %s %s  %s %s  %s %s%s%s",
 		m.Styles.KeyHint.Render("↑/↓"), m.Styles.KeyDesc.Render("Browse Hits"),
+		m.Styles.KeyHint.Render("←/→"), m.Styles.KeyDesc.Render("Scroll Line"),
 		m.Styles.KeyHint.Render("+/-"), m.Styles.KeyDesc.Render(fmt.Sprintf("Context N=%d", m.ContextRadius)),
 		m.Styles.KeyHint.Render("Enter"), m.Styles.KeyDesc.Render("Select"),
-		m.Styles.KeyHint.Render("Ctrl+R"), m.Styles.KeyDesc.Render("Search Mode"),
-		m.Styles.KeyHint.Render("Ctrl+S"), m.Styles.KeyDesc.Render("Source"),
+		m.Styles.KeyHint.Render("Ctrl+R"), m.Styles.KeyDesc.Render("Mode"),
+		scrollHint,
 		notification,
 	)
 	components = append(components, m.Styles.StatusBar.Render(helpBar))
@@ -151,16 +157,15 @@ func (m Model) renderSearchHitsBox(boxWidth int, maxLines int) string {
 			}
 
 			cmdText := sanitizeCmd(item.Command)
+			cmdText = applyOffset(cmdText, m.CommandOffset)
 
 			if isSelected {
-				// Reserve 2 characters for "▸ "
 				maxCmdLen := max(10, contentWidth-len(idxStr)-len(srcBadge)-len(timeStr)-6)
 				cmdTruncated := truncateString(cmdText, maxCmdLen)
 				rowStr := fmt.Sprintf("▸ %s %s %s %s", idxStr, srcBadge, timeStr, cmdTruncated)
 				selectedLine := m.Styles.SelectedItem.Render(rowStr)
 				lines = append(lines, selectedLine)
 			} else {
-				// Reserve 2 spaces for "  "
 				maxCmdLen := max(10, contentWidth-len(idxStr)-len(srcBadge)-len(timeStr)-6)
 				cmdTruncated := truncateString(cmdText, maxCmdLen)
 				rowStr := fmt.Sprintf("  %s %s %s %s", idxStr, srcBadge, timeStr, cmdTruncated)
@@ -206,6 +211,15 @@ func (m Model) renderContextBox(boxWidth int, maxLines int) string {
 	}
 
 	targetMatchIdx := m.FilteredIndexes[selIdx]
+	if targetMatchIdx < 0 || targetMatchIdx >= len(m.CurrentItems) {
+		var lines []string
+		lines = append(lines, m.Styles.DimmedText.Render("No context available."))
+		for len(lines) < maxLines {
+			lines = append(lines, "")
+		}
+		return boxStyle.Render(strings.Join(lines[:maxLines], "\n"))
+	}
+
 	targetItem := m.CurrentItems[targetMatchIdx]
 	targetHistIndex := targetItem.Index
 
@@ -251,9 +265,9 @@ func (m Model) renderContextBox(boxWidth int, maxLines int) string {
 		}
 
 		cmdText := sanitizeCmd(item.Command)
+		cmdText = applyOffset(cmdText, m.CommandOffset)
 
 		if offset == 0 {
-			// Reserve 4 spaces for ">>> " and 2 padding spaces in ContextTarget
 			maxCmdLen := max(10, contentWidth-len(tag)-len(idxTag)-len(timeTag)-12)
 			cmdTruncated := truncateString(cmdText, maxCmdLen)
 			lineStr := fmt.Sprintf(">>> %s %s %s %s", tag, idxTag, timeTag, cmdTruncated)
@@ -277,6 +291,17 @@ func (m Model) renderContextBox(boxWidth int, maxLines int) string {
 	}
 
 	return boxStyle.Render(strings.Join(lines[:maxLines], "\n"))
+}
+
+func applyOffset(cmd string, offset int) string {
+	if offset <= 0 {
+		return cmd
+	}
+	runes := []rune(cmd)
+	if offset >= len(runes) {
+		return "« "
+	}
+	return "« " + string(runes[offset:])
 }
 
 func sanitizeCmd(cmd string) string {

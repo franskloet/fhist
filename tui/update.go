@@ -17,22 +17,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.TextInput.Width = max(15, msg.Width-35)
 
 	case tea.KeyMsg:
-		switch msg.String() {
+		keyStr := msg.String()
+
+		switch keyStr {
 		case "ctrl+c", "esc":
 			return m, tea.Quit
 
 		case "enter":
-			if len(m.FilteredIndexes) > 0 && m.SelectedIndex < len(m.FilteredIndexes) {
-				idx := m.FilteredIndexes[m.SelectedIndex]
+			selIdx := min(m.SelectedIndex, len(m.FilteredIndexes)-1)
+			if len(m.FilteredIndexes) > 0 && selIdx >= 0 {
+				idx := m.FilteredIndexes[selIdx]
 				m.SelectedCommand = m.CurrentItems[idx].Command
-				// Copy to system clipboard
 				_ = clipboard.WriteAll(m.SelectedCommand)
 			}
 			return m, tea.Quit
 
 		case "ctrl+o":
-			if len(m.FilteredIndexes) > 0 && m.SelectedIndex < len(m.FilteredIndexes) {
-				idx := m.FilteredIndexes[m.SelectedIndex]
+			selIdx := min(m.SelectedIndex, len(m.FilteredIndexes)-1)
+			if len(m.FilteredIndexes) > 0 && selIdx >= 0 {
+				idx := m.FilteredIndexes[selIdx]
 				m.SelectedCommand = m.CurrentItems[idx].Command
 				m.PrintContextOnExit = true
 				_ = clipboard.WriteAll(m.SelectedCommand)
@@ -43,44 +46,68 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.SelectedIndex > 0 {
 				m.SelectedIndex--
 			}
+			return m, nil
 
 		case "down", "ctrl+n":
 			if m.SelectedIndex < len(m.FilteredIndexes)-1 {
 				m.SelectedIndex++
 			}
+			return m, nil
+
+		case "right":
+			m.CommandOffset += 5
+			m.CopiedNotification = fmt.Sprintf("Scrolled right (+%d chars)", m.CommandOffset)
+			return m, nil
+
+		case "left":
+			if m.CommandOffset > 0 {
+				m.CommandOffset = max(0, m.CommandOffset-5)
+				if m.CommandOffset == 0 {
+					m.CopiedNotification = "Scrolled to start"
+				} else {
+					m.CopiedNotification = fmt.Sprintf("Scrolled (+%d chars)", m.CommandOffset)
+				}
+			}
+			return m, nil
+
+		case "+", "=", "shift+up", "alt+up":
+			if m.ContextRadius < 50 {
+				m.ContextRadius++
+				m.CopiedNotification = fmt.Sprintf("Context size N = %d", m.ContextRadius)
+			}
+			return m, nil
+
+		case "-", "_", "shift+down", "alt+down":
+			if m.ContextRadius > 1 {
+				m.ContextRadius--
+				m.CopiedNotification = fmt.Sprintf("Context size N = %d", m.ContextRadius)
+			}
+			return m, nil
 
 		case "pgup":
 			m.SelectedIndex = max(0, m.SelectedIndex-10)
+			return m, nil
 
 		case "pgdown":
 			m.SelectedIndex = min(len(m.FilteredIndexes)-1, m.SelectedIndex+10)
+			return m, nil
 
 		case "home":
 			m.SelectedIndex = 0
+			return m, nil
 
 		case "end":
 			if len(m.FilteredIndexes) > 0 {
 				m.SelectedIndex = len(m.FilteredIndexes) - 1
 			}
-
-		case "+", "=", "]":
-			if m.ContextRadius < 50 {
-				m.ContextRadius++
-				m.CopiedNotification = fmt.Sprintf("Context size N = %d", m.ContextRadius)
-			}
-
-		case "-", "_", "[":
-			if m.ContextRadius > 1 {
-				m.ContextRadius--
-				m.CopiedNotification = fmt.Sprintf("Context size N = %d", m.ContextRadius)
-			}
+			return m, nil
 
 		case "ctrl+r":
 			m.SearchMode = (m.SearchMode + 1) % 4
 			m.ApplyFilter()
+			return m, nil
 
 		case "ctrl+s":
-			// Cycle active source: bash -> zsh -> fish -> all
 			switch m.Store.ActiveSource {
 			case "bash":
 				m.Store.ActiveSource = "zsh"
@@ -94,11 +121,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.UpdateCurrentItems()
 			m.ApplyFilter()
 			m.CopiedNotification = fmt.Sprintf("Source switched to: %s", m.Store.ActiveSource)
+			return m, nil
 
 		case "ctrl+e":
-			// Copy full context window to clipboard
-			if len(m.FilteredIndexes) > 0 && m.SelectedIndex < len(m.FilteredIndexes) {
-				idx := m.FilteredIndexes[m.SelectedIndex]
+			selIdx := min(m.SelectedIndex, len(m.FilteredIndexes)-1)
+			if len(m.FilteredIndexes) > 0 && selIdx >= 0 {
+				idx := m.FilteredIndexes[selIdx]
 				targetHist := m.CurrentItems[idx]
 
 				start := max(0, targetHist.Index-m.ContextRadius)
@@ -115,10 +143,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				_ = clipboard.WriteAll(sb)
 				m.CopiedNotification = "Copied context window to clipboard!"
 			}
+			return m, nil
 		}
 	}
 
-	// Update text input
+	// Route text typing to text input
 	prevValue := m.TextInput.Value()
 	m.TextInput, cmd = m.TextInput.Update(msg)
 	if m.TextInput.Value() != prevValue {

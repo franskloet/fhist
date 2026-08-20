@@ -29,7 +29,6 @@ func main() {
 
 	flag.Parse()
 
-	// Handle shell init flag
 	if *initShell != "" {
 		script, err := shell.GetInitScript(*initShell)
 		if err != nil {
@@ -40,7 +39,6 @@ func main() {
 		return
 	}
 
-	// Consolidate short/long flags
 	N := 5
 	if *contextRadius != 5 {
 		N = *contextRadius
@@ -66,7 +64,6 @@ func main() {
 		filePath = *fileLong
 	}
 
-	// Load history
 	store, err := history.LoadAllHistory(filePath, srcStr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading history: %v\n", err)
@@ -78,11 +75,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize TUI Model
 	model := tui.NewModel(store, qStr, N)
 
-	// Run bubbletea program using alt screen
-	p := tea.NewProgram(model, tea.WithAltScreen())
+	// Run bubbletea program rendering TUI onto os.Stderr so os.Stdout remains clean for shell evaluation
+	p := tea.NewProgram(model, tea.WithAltScreen(), tea.WithOutput(os.Stderr))
 	finalModel, err := p.Run()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error running TUI: %v\n", err)
@@ -96,7 +92,6 @@ func main() {
 
 	if m.SelectedCommand != "" {
 		if *printContext || m.PrintContextOnExit {
-			// Print context window output
 			if len(m.FilteredIndexes) > 0 && m.SelectedIndex < len(m.FilteredIndexes) {
 				idx := m.FilteredIndexes[m.SelectedIndex]
 				targetHist := m.CurrentItems[idx]
@@ -104,20 +99,20 @@ func main() {
 				start := max(0, targetHist.Index-m.ContextRadius)
 				end := min(len(m.CurrentItems)-1, targetHist.Index+m.ContextRadius)
 
-				fmt.Printf("=== Context Window (N=%d around #%d) ===\n", m.ContextRadius, targetHist.Index+1)
+				fmt.Fprintf(os.Stderr, "=== Context Window (N=%d around #%d) ===\n", m.ContextRadius, targetHist.Index+1)
 				for i := start; i <= end; i++ {
 					item := m.CurrentItems[i]
 					marker := "  "
 					if i == targetHist.Index {
 						marker = "> "
 					}
-					fmt.Printf("%s#%-5d [%s] %s\n", marker, item.Index+1, item.ShortTime(), item.Command)
+					fmt.Fprintf(os.Stderr, "%s#%-5d [%s] %s\n", marker, item.Index+1, item.ShortTime(), item.Command)
 				}
-				fmt.Println("======================================")
+				fmt.Fprintln(os.Stderr, "======================================")
 			}
 		}
 
-		// Print selected command to stdout for shell execution / capture
+		// Clean output of ONLY the selected command string to stdout
 		fmt.Print(m.SelectedCommand)
 	}
 }
@@ -130,7 +125,7 @@ func max(a, b int) int {
 }
 
 func min(a, b int) int {
-	if a < b {
+	if a > b {
 		return a
 	}
 	return b

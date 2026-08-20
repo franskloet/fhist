@@ -54,10 +54,10 @@ type Model struct {
 
 func NewModel(store *history.HistoryStore, initialQuery string, contextRadius int) Model {
 	ti := textinput.New()
-	ti.Placeholder = "Type to search shell history..."
+	ti.Placeholder = "Type search query..."
 	ti.Focus()
 	ti.CharLimit = 256
-	ti.Width = 60
+	ti.Width = 35
 	if initialQuery != "" {
 		ti.SetValue(initialQuery)
 	}

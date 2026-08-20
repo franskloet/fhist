@@ -14,11 +14,11 @@ func (m Model) View() string {
 
 	boxWidth := max(30, m.Width-2)
 
-	// Calculate vertical line budget to fit perfectly inside m.Height
-	// Overhead lines:
-	// - Search Box (title border + input line + badge line + bottom border) = 4 lines
-	// - Search Hits Box (title border + content + bottom border) = topInnerHeight + 2
-	// - Context Box (title border + content + bottom border) = bottomInnerHeight + 2
+	// Strict vertical line budget math:
+	// Total terminal height = m.Height
+	// - Search Box (2 content lines + 2 border lines) = 4 lines
+	// - Search Hits Box (topInnerHeight content lines + 2 border lines)
+	// - Context Box (bottomInnerHeight content lines + 2 border lines)
 	// - Status bar = 1 line
 	// Total fixed overhead = 4 + 2 + 2 + 1 = 9 lines.
 
@@ -38,19 +38,19 @@ func (m Model) View() string {
 
 	var sb strings.Builder
 
-	// 1. Search Box (Top)
+	// 1. Search Box (Fixed height 4)
 	searchBoxStr := m.renderSearchBox(boxWidth)
 	sb.WriteString(searchBoxStr + "\n")
 
-	// 2. Search Hits Box (Middle Pane)
+	// 2. Search Hits Box (Fixed height topInnerHeight + 2)
 	hitsBoxStr := m.renderSearchHitsBox(boxWidth, topInnerHeight)
 	sb.WriteString(hitsBoxStr + "\n")
 
-	// 3. Context Preview Box (Bottom Pane)
+	// 3. Context Preview Box (Fixed height bottomInnerHeight + 2)
 	contextBoxStr := m.renderContextBox(boxWidth, bottomInnerHeight)
 	sb.WriteString(contextBoxStr + "\n")
 
-	// 4. Footer / Status Bar
+	// 4. Footer / Status Bar (Fixed height 1)
 	var notification string
 	if m.CopiedNotification != "" {
 		notification = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1")).Bold(true).Render(" " + m.CopiedNotification)
@@ -71,9 +71,14 @@ func (m Model) View() string {
 }
 
 func (m Model) renderSearchBox(boxWidth int) string {
-	prompt := m.Styles.SearchPrompt.Render("🔍 Type Search Query: ")
+	contentWidth := max(20, boxWidth-4)
+
+	prompt := m.Styles.SearchPrompt.Render("🔍 Search: ")
 	input := m.TextInput.View()
 	inputLine := prompt + input
+
+	// Ensure input line never exceeds contentWidth to avoid line wrapping
+	inputLine = lipgloss.NewStyle().MaxWidth(contentWidth).Render(inputLine)
 
 	// Badges
 	sourceBadge := m.renderSourceBadge(m.Store.ActiveSource)
@@ -86,6 +91,7 @@ func (m Model) renderSearchBox(boxWidth int) string {
 	counter := m.Styles.CounterText.Render(hitCount)
 
 	badgeLine := fmt.Sprintf("%s %s  %s", sourceBadge, modeBadge, counter)
+	badgeLine = lipgloss.NewStyle().MaxWidth(contentWidth).Render(badgeLine)
 
 	boxContent := inputLine + "\n" + badgeLine
 
@@ -93,7 +99,8 @@ func (m Model) renderSearchBox(boxWidth int) string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#89B4FA")).
 		Padding(0, 1).
-		Width(boxWidth)
+		Width(boxWidth).
+		Height(4)
 
 	return searchStyle.Render(boxContent)
 }
@@ -163,11 +170,8 @@ func (m Model) renderSearchHitsBox(boxWidth int, maxLines int) string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("#CDD6F4")).
 		Padding(0, 1).
-		Width(boxWidth)
-
-	// Add header title directly to box
-	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#89B4FA")).Render(" Search Hits (Use ↑ / ↓ to navigate) ")
-	_ = title
+		Width(boxWidth).
+		Height(maxLines + 2)
 
 	return hitsStyle.Render(boxContent)
 }
@@ -175,17 +179,19 @@ func (m Model) renderSearchHitsBox(boxWidth int, maxLines int) string {
 func (m Model) renderContextBox(boxWidth int, maxLines int) string {
 	contentWidth := max(20, boxWidth-4)
 
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#CBA6F7")).
+		Padding(0, 1).
+		Width(boxWidth).
+		Height(maxLines + 2)
+
 	if len(m.FilteredIndexes) == 0 || m.SelectedIndex >= len(m.FilteredIndexes) {
 		var lines []string
 		lines = append(lines, m.Styles.DimmedText.Render("No context available."))
 		for len(lines) < maxLines {
 			lines = append(lines, "")
 		}
-		boxStyle := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#CBA6F7")).
-			Padding(0, 1).
-			Width(boxWidth)
 		return boxStyle.Render(strings.Join(lines[:maxLines], "\n"))
 	}
 
@@ -255,13 +261,7 @@ func (m Model) renderContextBox(boxWidth int, maxLines int) string {
 		lines = append(lines, "")
 	}
 
-	contextStyle := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#CBA6F7")).
-		Padding(0, 1).
-		Width(boxWidth)
-
-	return contextStyle.Render(strings.Join(lines[:maxLines], "\n"))
+	return boxStyle.Render(strings.Join(lines[:maxLines], "\n"))
 }
 
 func sanitizeCmd(cmd string) string {

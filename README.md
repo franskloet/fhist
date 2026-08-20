@@ -23,7 +23,15 @@
 
 ## Installation & Setup
 
-`fhist` is compiled and installed at `/home/frans/bin/fhist` and `/home/frans/Utils/fhist`.
+### Building from Source
+
+You can build and install `fhist` using the included `Makefile`:
+
+```bash
+make          # Build and test
+make install  # Compiles and installs fhist to ~/bin and ~/Utils
+make test     # Runs test suite
+```
 
 ### Shell Integration (`Ctrl+R` Keybinding)
 

@@ -12,13 +12,36 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
+	// Calculate strict pixel-perfect line budget
+	// Total height budget = m.Height
+	// Overhead lines:
+	// - Header: 1 line
+	// - Status Bar: 1 line
+	// - Top Box Borders: 2 lines
+	// - Bottom Box Borders: 2 lines
+	// Total fixed overhead = 6 lines.
+
+	totalAvailInner := m.Height - 6
+	if totalAvailInner < 6 {
+		totalAvailInner = 6
+	}
+
+	// Allocate 50% to Top Pane (Search Hits) and 50% to Bottom Pane (Context)
+	topInnerHeight := totalAvailInner / 2
+	if topInnerHeight < 3 {
+		topInnerHeight = 3
+	}
+	bottomInnerHeight := totalAvailInner - topInnerHeight
+	if bottomInnerHeight < 3 {
+		bottomInnerHeight = 3
+	}
+
 	var sb strings.Builder
 
 	// 1. Header (Search Bar & Badges)
 	title := m.Styles.HeaderTitle.Render("fhist")
 	searchInput := m.TextInput.View()
 
-	// Badges
 	sourceBadge := m.renderSourceBadge(m.Store.ActiveSource)
 	modeBadge := m.Styles.BadgeBox.
 		Foreground(lipgloss.Color("#11111B")).
@@ -31,37 +54,23 @@ func (m Model) View() string {
 	headerLine := fmt.Sprintf("%s %s  %s %s  %s", title, searchInput, sourceBadge, modeBadge, counter)
 	sb.WriteString(headerLine + "\n")
 
-	// Calculate vertical layout sizes
-	availHeight := m.Height - 6 // Header(2), Divider(1), Footer(1), Margins(2)
-	if availHeight < 10 {
-		availHeight = 10
-	}
+	// 2. Top Pane (Search Matches List Box)
+	topPaneContent := m.renderTopPane(topInnerHeight)
+	topBox := m.Styles.TableBorder.
+		Width(max(20, m.Width-2)).
+		Height(topInnerHeight + 2).
+		Render(topPaneContent)
+	sb.WriteString(topBox + "\n")
 
-	// Calculate Top vs Bottom pane heights (approx 45% top, 55% bottom)
-	topPaneHeight := availHeight * 45 / 100
-	if topPaneHeight < 4 {
-		topPaneHeight = 4
-	}
-	bottomPaneHeight := availHeight - topPaneHeight
-	if bottomPaneHeight < 5 {
-		bottomPaneHeight = 5
-	}
+	// 3. Bottom Pane (Context Window Box)
+	bottomPaneContent := m.renderContextPane(bottomInnerHeight)
+	bottomBox := m.Styles.ContextBox.
+		Width(max(20, m.Width-2)).
+		Height(bottomInnerHeight + 2).
+		Render(bottomPaneContent)
+	sb.WriteString(bottomBox + "\n")
 
-	// 2. Top Pane: Search Match List
-	topPaneStr := m.renderTopPane(topPaneHeight)
-	sb.WriteString(topPaneStr + "\n")
-
-	// 3. Separator Bar
-	divider := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#45475A")).
-		Render(strings.Repeat("─", max(20, m.Width-2)))
-	sb.WriteString(divider + "\n")
-
-	// 4. Bottom Pane: Context Window (N before and N after selected hit)
-	bottomPaneStr := m.renderContextPane(bottomPaneHeight)
-	sb.WriteString(bottomPaneStr + "\n")
-
-	// 5. Footer / Status Bar
+	// 4. Status Bar
 	var notification string
 	if m.CopiedNotification != "" {
 		notification = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1")).Bold(true).Render(" " + m.CopiedNotification)
@@ -69,7 +78,7 @@ func (m Model) View() string {
 
 	helpBar := fmt.Sprintf(
 		"%s %s  %s %s  %s %s  %s %s  %s %s%s",
-		m.Styles.KeyHint.Render("↑/↓"), m.Styles.KeyDesc.Render("Nav"),
+		m.Styles.KeyHint.Render("↑/↓"), m.Styles.KeyDesc.Render("Browse Hits"),
 		m.Styles.KeyHint.Render("+/-"), m.Styles.KeyDesc.Render(fmt.Sprintf("Context N=%d", m.ContextRadius)),
 		m.Styles.KeyHint.Render("Enter"), m.Styles.KeyDesc.Render("Select"),
 		m.Styles.KeyHint.Render("Ctrl+R"), m.Styles.KeyDesc.Render("Search Mode"),
@@ -95,10 +104,18 @@ func (m Model) renderSourceBadge(source string) string {
 }
 
 func (m Model) renderTopPane(maxLines int) string {
+	contentWidth := max(20, m.Width-6)
+
 	if len(m.FilteredIndexes) == 0 {
-		return m.Styles.DimmedText.Render("  No matching history commands found.")
+		var lines []string
+		lines = append(lines, m.Styles.DimmedText.Render("  No matching history commands found."))
+		for len(lines) < maxLines {
+			lines = append(lines, "")
+		}
+		return strings.Join(lines[:maxLines], "\n")
 	}
 
+	// Calculate scrolling window for top pane list
 	startIdx := 0
 	if m.SelectedIndex >= maxLines {
 		startIdx = m.SelectedIndex - maxLines + 1
@@ -106,7 +123,6 @@ func (m Model) renderTopPane(maxLines int) string {
 	endIdx := min(len(m.FilteredIndexes), startIdx+maxLines)
 
 	var lines []string
-	contentWidth := max(20, m.Width-4)
 
 	for i := startIdx; i < endIdx; i++ {
 		itemIdx := m.FilteredIndexes[i]
@@ -124,39 +140,61 @@ func (m Model) renderTopPane(maxLines int) string {
 
 		cmdText := sanitizeCmd(item.Command)
 
-		rowStr := fmt.Sprintf(" %s %s %s %s", idxStr, srcBadge, timeStr, cmdText)
-		rowStr = truncateString(rowStr, contentWidth)
+		rowStr := fmt.Sprintf("%s %s %s %s", idxStr, srcBadge, timeStr, cmdText)
+		rowStr = truncateString(rowStr, contentWidth-3)
 
 		if isSelected {
-			selectedLine := m.Styles.SelectedItem.Width(contentWidth).Render("> " + rowStr)
+			selectedLine := m.Styles.SelectedItem.Width(contentWidth).Render("▸ " + rowStr)
 			lines = append(lines, selectedLine)
 		} else {
 			lines = append(lines, "  "+m.Styles.NormalItem.Render(rowStr))
 		}
 	}
 
-	return strings.Join(lines, "\n")
+	// Fill remaining height with blank lines so height stays fixed
+	for len(lines) < maxLines {
+		lines = append(lines, "")
+	}
+
+	return strings.Join(lines[:maxLines], "\n")
 }
 
 func (m Model) renderContextPane(maxLines int) string {
+	contentWidth := max(20, m.Width-6)
+
 	if len(m.FilteredIndexes) == 0 || m.SelectedIndex >= len(m.FilteredIndexes) {
-		return m.Styles.ContextBox.Width(max(20, m.Width-4)).Render("No context available.")
+		var lines []string
+		lines = append(lines, m.Styles.DimmedText.Render("No context available."))
+		for len(lines) < maxLines {
+			lines = append(lines, "")
+		}
+		return strings.Join(lines[:maxLines], "\n")
 	}
 
 	targetMatchIdx := m.FilteredIndexes[m.SelectedIndex]
 	targetItem := m.CurrentItems[targetMatchIdx]
 	targetHistIndex := targetItem.Index
 
-	startHistIndex := max(0, targetHistIndex-m.ContextRadius)
-	endHistIndex := min(len(m.CurrentItems)-1, targetHistIndex+m.ContextRadius)
-
+	// Title header takes 1 line
 	titleText := fmt.Sprintf("Context Window (N = %d commands before/after hit #%d)", m.ContextRadius, targetHistIndex+1)
-	header := m.Styles.ContextTitle.Render("│ " + titleText)
+	header := m.Styles.ContextTitle.Render(titleText)
 
 	var lines []string
 	lines = append(lines, header)
 
-	contentWidth := max(20, m.Width-6)
+	availLinesForContext := maxLines - 1
+	if availLinesForContext < 1 {
+		availLinesForContext = 1
+	}
+
+	// Determine how many lines before and after we can fit
+	radius := (availLinesForContext - 1) / 2
+	if radius > m.ContextRadius {
+		radius = m.ContextRadius
+	}
+
+	startHistIndex := max(0, targetHistIndex-radius)
+	endHistIndex := min(len(m.CurrentItems)-1, targetHistIndex+radius)
 
 	for i := startHistIndex; i <= endHistIndex; i++ {
 		item := m.CurrentItems[i]
@@ -181,12 +219,12 @@ func (m Model) renderContextPane(maxLines int) string {
 
 		if offset == 0 {
 			lineStr := fmt.Sprintf("%s %s %s %s", tag, idxTag, timeTag, cmdText)
-			lineStr = truncateString(lineStr, contentWidth)
+			lineStr = truncateString(lineStr, contentWidth-4)
 			highlightedLine := m.Styles.ContextTarget.Width(contentWidth).Render(">>> " + lineStr)
 			lines = append(lines, highlightedLine)
 		} else {
 			lineStr := fmt.Sprintf("%s %s %s %s", tag, idxTag, timeTag, cmdText)
-			lineStr = truncateString(lineStr, contentWidth)
+			lineStr = truncateString(lineStr, contentWidth-4)
 
 			tagStyled := m.Styles.ContextTag.Render(tag)
 			idxStyled := m.Styles.DimmedText.Render(idxTag)
@@ -197,8 +235,12 @@ func (m Model) renderContextPane(maxLines int) string {
 		}
 	}
 
-	boxContent := strings.Join(lines, "\n")
-	return m.Styles.ContextBox.Width(max(20, m.Width-2)).Render(boxContent)
+	// Fill remaining height with blank lines so height stays fixed
+	for len(lines) < maxLines {
+		lines = append(lines, "")
+	}
+
+	return strings.Join(lines[:maxLines], "\n")
 }
 
 func sanitizeCmd(cmd string) string {

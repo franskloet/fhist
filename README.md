@@ -74,3 +74,9 @@ fhist [OPTIONS] [QUERY]
 | `Enter` | Select command (copies to clipboard, prints to stdout, and exits) |
 | `Ctrl+O` | Select command & print full context window on exit |
 | `Esc` / `Ctrl+C` | Exit without selecting |
+
+---
+
+## License
+
+This project is open-source software licensed under the [MIT License](LICENSE).

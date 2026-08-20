@@ -14,7 +14,8 @@ func (m Model) View() string {
 
 	boxWidth := max(30, m.Width-2)
 
-	// Strict Height Math to guarantee total output lines == m.Height:
+	// Strict Height Math:
+	// Total terminal height = m.Height
 	// - Search Box: 4 lines
 	// - Hits Box borders: 2 lines
 	// - Context Box borders: 2 lines
@@ -145,14 +146,19 @@ func (m Model) renderSearchHitsBox(boxWidth int, maxLines int) string {
 
 			cmdText := sanitizeCmd(item.Command)
 
-			rowStr := fmt.Sprintf("%s %s %s %s", idxStr, srcBadge, timeStr, cmdText)
-			rowStr = truncateString(rowStr, contentWidth-3)
-
 			if isSelected {
-				selectedLine := m.Styles.SelectedItem.Width(contentWidth).Render("▸ " + rowStr)
+				// Reserve 2 characters for "▸ "
+				maxCmdLen := max(10, contentWidth-len(idxStr)-len(srcBadge)-len(timeStr)-6)
+				cmdTruncated := truncateString(cmdText, maxCmdLen)
+				rowStr := fmt.Sprintf("▸ %s %s %s %s", idxStr, srcBadge, timeStr, cmdTruncated)
+				selectedLine := m.Styles.SelectedItem.Render(rowStr)
 				lines = append(lines, selectedLine)
 			} else {
-				lines = append(lines, "  "+m.Styles.NormalItem.Render(rowStr))
+				// Reserve 2 spaces for "  "
+				maxCmdLen := max(10, contentWidth-len(idxStr)-len(srcBadge)-len(timeStr)-6)
+				cmdTruncated := truncateString(cmdText, maxCmdLen)
+				rowStr := fmt.Sprintf("  %s %s %s %s", idxStr, srcBadge, timeStr, cmdTruncated)
+				lines = append(lines, m.Styles.NormalItem.Render(rowStr))
 			}
 		}
 	}
@@ -195,7 +201,7 @@ func (m Model) renderContextBox(boxWidth int, maxLines int) string {
 	targetHistIndex := targetItem.Index
 
 	titleText := fmt.Sprintf("Context Preview (%d commands BEFORE & AFTER selected hit #%d)", m.ContextRadius, targetHistIndex+1)
-	header := m.Styles.ContextTitle.Render(titleText)
+	header := m.Styles.ContextTitle.Render(truncateString(titleText, contentWidth))
 
 	var lines []string
 	lines = append(lines, header)
@@ -235,18 +241,20 @@ func (m Model) renderContextBox(boxWidth int, maxLines int) string {
 		cmdText := sanitizeCmd(item.Command)
 
 		if offset == 0 {
-			lineStr := fmt.Sprintf("%s %s %s %s", tag, idxTag, timeTag, cmdText)
-			lineStr = truncateString(lineStr, contentWidth-4)
-			highlightedLine := m.Styles.ContextTarget.Width(contentWidth).Render(">>> " + lineStr)
+			// Reserve 4 spaces for ">>> " and 2 padding spaces in ContextTarget
+			maxCmdLen := max(10, contentWidth-len(tag)-len(idxTag)-len(timeTag)-12)
+			cmdTruncated := truncateString(cmdText, maxCmdLen)
+			lineStr := fmt.Sprintf(">>> %s %s %s %s", tag, idxTag, timeTag, cmdTruncated)
+			highlightedLine := m.Styles.ContextTarget.Render(lineStr)
 			lines = append(lines, highlightedLine)
 		} else {
-			lineStr := fmt.Sprintf("%s %s %s %s", tag, idxTag, timeTag, cmdText)
-			lineStr = truncateString(lineStr, contentWidth-4)
+			maxCmdLen := max(10, contentWidth-len(tag)-len(idxTag)-len(timeTag)-12)
+			cmdTruncated := truncateString(cmdText, maxCmdLen)
 
 			tagStyled := m.Styles.ContextTag.Render(tag)
 			idxStyled := m.Styles.DimmedText.Render(idxTag)
 			timeStyled := m.Styles.DimmedText.Render(timeTag)
-			cmdStyled := m.Styles.ContextBefore.Render(cmdText)
+			cmdStyled := m.Styles.ContextBefore.Render(cmdTruncated)
 
 			lines = append(lines, fmt.Sprintf("    %s %s %s %s", tagStyled, idxStyled, timeStyled, cmdStyled))
 		}

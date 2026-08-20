@@ -102,6 +102,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 
+		case "ctrl+t":
+			m.SortByAge = !m.SortByAge
+			m.ApplyFilter()
+			if m.SortByAge {
+				m.CopiedNotification = "Sort: Oldest First (Age Order)"
+			} else {
+				m.CopiedNotification = "Sort: Newest First"
+			}
+			return m, nil
+
 		case "ctrl+r":
 			m.SearchMode = (m.SearchMode + 1) % 4
 			m.ApplyFilter()

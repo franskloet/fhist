@@ -63,11 +63,12 @@ func (m Model) View() string {
 	}
 
 	helpBar := fmt.Sprintf(
-		" %s %s  %s %s  %s %s  %s %s  %s %s%s%s",
-		m.Styles.KeyHint.Render("↑/↓"), m.Styles.KeyDesc.Render("Browse Hits"),
-		m.Styles.KeyHint.Render("←/→"), m.Styles.KeyDesc.Render("Scroll Line"),
+		" %s %s  %s %s  %s %s  %s %s  %s %s  %s %s%s%s",
+		m.Styles.KeyHint.Render("↑/↓"), m.Styles.KeyDesc.Render("Browse"),
+		m.Styles.KeyHint.Render("←/→"), m.Styles.KeyDesc.Render("Scroll"),
 		m.Styles.KeyHint.Render("+/-"), m.Styles.KeyDesc.Render(fmt.Sprintf("Context N=%d", m.ContextRadius)),
 		m.Styles.KeyHint.Render("Enter"), m.Styles.KeyDesc.Render("Select"),
+		m.Styles.KeyHint.Render("Ctrl+T"), m.Styles.KeyDesc.Render("Sort"),
 		m.Styles.KeyHint.Render("Ctrl+R"), m.Styles.KeyDesc.Render("Mode"),
 		scrollHint,
 		notification,
@@ -92,10 +93,19 @@ func (m Model) renderSearchBox(boxWidth int) string {
 		Background(lipgloss.Color("#F38BA8")).
 		Render(fmt.Sprintf("[%s Mode]", m.SearchMode.String()))
 
+	sortText := "[Age Order #1→#N]"
+	if !m.SortByAge {
+		sortText = "[Newest First]"
+	}
+	sortBadge := m.Styles.BadgeBox.
+		Foreground(lipgloss.Color("#11111B")).
+		Background(lipgloss.Color("#A6E3A1")).
+		Render(sortText)
+
 	hitCount := fmt.Sprintf("%d / %d matches", len(m.FilteredIndexes), len(m.CurrentItems))
 	counter := m.Styles.CounterText.Render(hitCount)
 
-	badgeLine := fmt.Sprintf("%s %s  %s", sourceBadge, modeBadge, counter)
+	badgeLine := fmt.Sprintf("%s %s %s  %s", sourceBadge, modeBadge, sortBadge, counter)
 	badgeLine = truncateString(badgeLine, contentWidth)
 
 	boxContent := inputLine + "\n" + badgeLine
@@ -150,11 +160,7 @@ func (m Model) renderSearchHitsBox(boxWidth int, maxLines int) string {
 
 			idxStr := fmt.Sprintf("#%-5d", item.Index+1)
 			srcBadge := fmt.Sprintf("%-6s", item.FormatSourceBadge())
-
-			timeStr := item.ShortTime()
-			if timeStr != "" {
-				timeStr = fmt.Sprintf("%-12s", timeStr)
-			}
+			timeStr := fmt.Sprintf("%-12s", item.ShortTime())
 
 			cmdText := sanitizeCmd(item.Command)
 			cmdText = applyOffset(cmdText, m.CommandOffset)
@@ -260,8 +266,10 @@ func (m Model) renderContextBox(boxWidth int, maxLines int) string {
 
 		idxTag := fmt.Sprintf("#%-5d", item.Index+1)
 		timeTag := item.ShortTime()
-		if timeTag != "" {
+		if timeTag != "" && timeTag != idxTag {
 			timeTag = "[" + timeTag + "]"
+		} else {
+			timeTag = ""
 		}
 
 		cmdText := sanitizeCmd(item.Command)

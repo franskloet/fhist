@@ -25,13 +25,13 @@ func (h HistoryItem) DisplayTime() string {
 
 func (h HistoryItem) ShortTime() string {
 	if h.Timestamp.IsZero() {
-		return ""
+		return fmt.Sprintf("#%-5d", h.Index+1)
 	}
 	now := time.Now()
-	if h.Timestamp.Year() == now.Year() && h.Timestamp.YearDay() == now.YearDay() {
-		return h.Timestamp.Format("15:04:05")
+	if h.Timestamp.Year() == now.Year() {
+		return h.Timestamp.Format("01-02 15:04")
 	}
-	return h.Timestamp.Format("01/02 15:04")
+	return h.Timestamp.Format("2006-01-02 15:04")
 }
 
 func (h HistoryItem) FormatSourceBadge() string {

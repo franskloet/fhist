@@ -40,8 +40,9 @@ type Model struct {
 	CurrentItems       []history.HistoryItem
 	FilteredIndexes    []int
 	SelectedIndex      int
-	ContextRadius      int // N commands before and after hit
-	CommandOffset      int // Horizontal scroll offset for long command lines
+	ContextRadius      int  // N commands before and after hit
+	CommandOffset      int  // Horizontal scroll offset for long command lines
+	SortByAge          bool // True = Oldest First (Age order #1 -> #N), False = Newest First
 	SearchMode         SearchMode
 	TextInput          textinput.Model
 	Styles             Styles
@@ -71,6 +72,7 @@ func NewModel(store *history.HistoryStore, initialQuery string, contextRadius in
 		Store:         store,
 		ContextRadius: contextRadius,
 		CommandOffset: 0,
+		SortByAge:     true, // Default to Age Order (#1 -> #N) as requested
 		SearchMode:    ModeContains,
 		TextInput:     ti,
 		Styles:        DefaultStyles(),
@@ -89,37 +91,62 @@ func (m *Model) UpdateCurrentItems() {
 
 func (m *Model) ApplyFilter() {
 	query := strings.TrimSpace(m.TextInput.Value())
+	n := len(m.CurrentItems)
+
+	var results []int
+
 	if query == "" {
-		m.FilteredIndexes = make([]int, len(m.CurrentItems))
-		n := len(m.CurrentItems)
-		for i := 0; i < n; i++ {
-			m.FilteredIndexes[i] = n - 1 - i
+		results = make([]int, n)
+		if m.SortByAge {
+			// Age Order: #1 -> #N (0 -> n-1)
+			for i := 0; i < n; i++ {
+				results[i] = i
+			}
+		} else {
+			// Newest First: #N -> #1 (n-1 -> 0)
+			for i := 0; i < n; i++ {
+				results[i] = n - 1 - i
+			}
 		}
+		m.FilteredIndexes = results
 		if m.SelectedIndex >= len(m.FilteredIndexes) {
 			m.SelectedIndex = max(0, len(m.FilteredIndexes)-1)
 		}
 		return
 	}
 
-	var results []int
-	n := len(m.CurrentItems)
-
 	switch m.SearchMode {
 	case ModeContains:
 		queryLower := strings.ToLower(query)
 		tokens := strings.Fields(queryLower)
 
-		for i := n - 1; i >= 0; i-- {
-			cmdLower := strings.ToLower(m.CurrentItems[i].Command)
-			matchAll := true
-			for _, token := range tokens {
-				if !strings.Contains(cmdLower, token) {
-					matchAll = false
-					break
+		if m.SortByAge {
+			for i := 0; i < n; i++ {
+				cmdLower := strings.ToLower(m.CurrentItems[i].Command)
+				matchAll := true
+				for _, token := range tokens {
+					if !strings.Contains(cmdLower, token) {
+						matchAll = false
+						break
+					}
+				}
+				if matchAll {
+					results = append(results, i)
 				}
 			}
-			if matchAll {
-				results = append(results, i)
+		} else {
+			for i := n - 1; i >= 0; i-- {
+				cmdLower := strings.ToLower(m.CurrentItems[i].Command)
+				matchAll := true
+				for _, token := range tokens {
+					if !strings.Contains(cmdLower, token) {
+						matchAll = false
+						break
+					}
+				}
+				if matchAll {
+					results = append(results, i)
+				}
 			}
 		}
 
@@ -129,24 +156,46 @@ func (m *Model) ApplyFilter() {
 			strList[i] = item.Command
 		}
 		matches := fuzzy.Find(query, strList)
-		for i := len(matches) - 1; i >= 0; i-- {
-			results = append(results, matches[i].Index)
+		if m.SortByAge {
+			for i := 0; i < len(matches); i++ {
+				results = append(results, matches[i].Index)
+			}
+		} else {
+			for i := len(matches) - 1; i >= 0; i-- {
+				results = append(results, matches[i].Index)
+			}
 		}
 
 	case ModePrefix:
 		q := strings.ToLower(query)
-		for i := n - 1; i >= 0; i-- {
-			if strings.HasPrefix(strings.ToLower(m.CurrentItems[i].Command), q) {
-				results = append(results, i)
+		if m.SortByAge {
+			for i := 0; i < n; i++ {
+				if strings.HasPrefix(strings.ToLower(m.CurrentItems[i].Command), q) {
+					results = append(results, i)
+				}
+			}
+		} else {
+			for i := n - 1; i >= 0; i-- {
+				if strings.HasPrefix(strings.ToLower(m.CurrentItems[i].Command), q) {
+					results = append(results, i)
+				}
 			}
 		}
 
 	case ModeRegex:
 		re, err := regexp.Compile("(?i)" + query)
 		if err == nil {
-			for i := n - 1; i >= 0; i-- {
-				if re.MatchString(m.CurrentItems[i].Command) {
-					results = append(results, i)
+			if m.SortByAge {
+				for i := 0; i < n; i++ {
+					if re.MatchString(m.CurrentItems[i].Command) {
+						results = append(results, i)
+					}
+				}
+			} else {
+				for i := n - 1; i >= 0; i-- {
+					if re.MatchString(m.CurrentItems[i].Command) {
+						results = append(results, i)
+					}
 				}
 			}
 		}

@@ -21,21 +21,18 @@ func TestHorizontalScrollingAndKeyNav(t *testing.T) {
 
 	m := NewModel(store, "", 5)
 
-	// Test Right Key
 	m2, _ := m.Update(tea.KeyMsg{Type: tea.KeyRight})
 	model2 := m2.(Model)
 	if model2.CommandOffset != 5 {
 		t.Errorf("Expected CommandOffset 5 after Right key, got %d", model2.CommandOffset)
 	}
 
-	// Test Left Key
 	m3, _ := model2.Update(tea.KeyMsg{Type: tea.KeyLeft})
 	model3 := m3.(Model)
 	if model3.CommandOffset != 0 {
 		t.Errorf("Expected CommandOffset 0 after Left key, got %d", model3.CommandOffset)
 	}
 
-	// Test Alt+Up Key for Context Radius
 	m4, _ := model3.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'='}})
 	model4 := m4.(Model)
 	if model4.ContextRadius != 6 {
@@ -63,14 +60,15 @@ func TestChrootSearchAccuracy(t *testing.T) {
 		t.Fatalf("Expected exactly 2 hits for 'chroot', got %d", len(m.FilteredIndexes))
 	}
 
+	// In Age Order (#1 -> #N), older hit (index 1) comes first!
 	hit1 := m.CurrentItems[m.FilteredIndexes[0]].Command
 	hit2 := m.CurrentItems[m.FilteredIndexes[1]].Command
 
-	if hit1 != "sudo chroot /target" {
-		t.Errorf("Expected first hit 'sudo chroot /target', got '%s'", hit1)
+	if hit1 != "chroot /mnt /bin/bash" {
+		t.Errorf("Expected first hit 'chroot /mnt /bin/bash', got '%s'", hit1)
 	}
-	if hit2 != "chroot /mnt /bin/bash" {
-		t.Errorf("Expected second hit 'chroot /mnt /bin/bash', got '%s'", hit2)
+	if hit2 != "sudo chroot /target" {
+		t.Errorf("Expected second hit 'sudo chroot /target', got '%s'", hit2)
 	}
 
 	fmt.Println("Chroot search test passed cleanly!")

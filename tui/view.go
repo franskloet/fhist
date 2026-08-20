@@ -12,72 +12,52 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
-	// Calculate strict pixel-perfect line budget
-	// Total height budget = m.Height
-	// Overhead lines:
-	// - Header: 1 line
-	// - Status Bar: 1 line
-	// - Top Box Borders: 2 lines
-	// - Bottom Box Borders: 2 lines
-	// Total fixed overhead = 6 lines.
+	boxWidth := max(30, m.Width-2)
 
-	totalAvailInner := m.Height - 6
-	if totalAvailInner < 6 {
-		totalAvailInner = 6
+	// Calculate vertical line budget to fit perfectly inside m.Height
+	// Overhead lines:
+	// - Search Box (title border + input line + badge line + bottom border) = 4 lines
+	// - Search Hits Box (title border + content + bottom border) = topInnerHeight + 2
+	// - Context Box (title border + content + bottom border) = bottomInnerHeight + 2
+	// - Status bar = 1 line
+	// Total fixed overhead = 4 + 2 + 2 + 1 = 9 lines.
+
+	totalAvailInner := m.Height - 9
+	if totalAvailInner < 4 {
+		totalAvailInner = 4
 	}
 
-	// Allocate 50% to Top Pane (Search Hits) and 50% to Bottom Pane (Context)
 	topInnerHeight := totalAvailInner / 2
-	if topInnerHeight < 3 {
-		topInnerHeight = 3
+	if topInnerHeight < 2 {
+		topInnerHeight = 2
 	}
 	bottomInnerHeight := totalAvailInner - topInnerHeight
-	if bottomInnerHeight < 3 {
-		bottomInnerHeight = 3
+	if bottomInnerHeight < 2 {
+		bottomInnerHeight = 2
 	}
 
 	var sb strings.Builder
 
-	// 1. Header (Search Bar & Badges)
-	title := m.Styles.HeaderTitle.Render("fhist")
-	searchInput := m.TextInput.View()
+	// 1. Search Box (Top)
+	searchBoxStr := m.renderSearchBox(boxWidth)
+	sb.WriteString(searchBoxStr + "\n")
 
-	sourceBadge := m.renderSourceBadge(m.Store.ActiveSource)
-	modeBadge := m.Styles.BadgeBox.
-		Foreground(lipgloss.Color("#11111B")).
-		Background(lipgloss.Color("#F38BA8")).
-		Render(fmt.Sprintf("[%s]", m.SearchMode.String()))
+	// 2. Search Hits Box (Middle Pane)
+	hitsBoxStr := m.renderSearchHitsBox(boxWidth, topInnerHeight)
+	sb.WriteString(hitsBoxStr + "\n")
 
-	hitCount := fmt.Sprintf("%d/%d matches", len(m.FilteredIndexes), len(m.CurrentItems))
-	counter := m.Styles.CounterText.Render(hitCount)
+	// 3. Context Preview Box (Bottom Pane)
+	contextBoxStr := m.renderContextBox(boxWidth, bottomInnerHeight)
+	sb.WriteString(contextBoxStr + "\n")
 
-	headerLine := fmt.Sprintf("%s %s  %s %s  %s", title, searchInput, sourceBadge, modeBadge, counter)
-	sb.WriteString(headerLine + "\n")
-
-	// 2. Top Pane (Search Matches List Box)
-	topPaneContent := m.renderTopPane(topInnerHeight)
-	topBox := m.Styles.TableBorder.
-		Width(max(20, m.Width-2)).
-		Height(topInnerHeight + 2).
-		Render(topPaneContent)
-	sb.WriteString(topBox + "\n")
-
-	// 3. Bottom Pane (Context Window Box)
-	bottomPaneContent := m.renderContextPane(bottomInnerHeight)
-	bottomBox := m.Styles.ContextBox.
-		Width(max(20, m.Width-2)).
-		Height(bottomInnerHeight + 2).
-		Render(bottomPaneContent)
-	sb.WriteString(bottomBox + "\n")
-
-	// 4. Status Bar
+	// 4. Footer / Status Bar
 	var notification string
 	if m.CopiedNotification != "" {
 		notification = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6E3A1")).Bold(true).Render(" " + m.CopiedNotification)
 	}
 
 	helpBar := fmt.Sprintf(
-		"%s %s  %s %s  %s %s  %s %s  %s %s%s",
+		" %s %s  %s %s  %s %s  %s %s  %s %s%s",
 		m.Styles.KeyHint.Render("↑/↓"), m.Styles.KeyDesc.Render("Browse Hits"),
 		m.Styles.KeyHint.Render("+/-"), m.Styles.KeyDesc.Render(fmt.Sprintf("Context N=%d", m.ContextRadius)),
 		m.Styles.KeyHint.Render("Enter"), m.Styles.KeyDesc.Render("Select"),
@@ -90,77 +70,110 @@ func (m Model) View() string {
 	return sb.String()
 }
 
+func (m Model) renderSearchBox(boxWidth int) string {
+	prompt := m.Styles.SearchPrompt.Render("🔍 Type Search Query: ")
+	input := m.TextInput.View()
+	inputLine := prompt + input
+
+	// Badges
+	sourceBadge := m.renderSourceBadge(m.Store.ActiveSource)
+	modeBadge := m.Styles.BadgeBox.
+		Foreground(lipgloss.Color("#11111B")).
+		Background(lipgloss.Color("#F38BA8")).
+		Render(fmt.Sprintf("[%s Mode]", m.SearchMode.String()))
+
+	hitCount := fmt.Sprintf("%d / %d matches", len(m.FilteredIndexes), len(m.CurrentItems))
+	counter := m.Styles.CounterText.Render(hitCount)
+
+	badgeLine := fmt.Sprintf("%s %s  %s", sourceBadge, modeBadge, counter)
+
+	boxContent := inputLine + "\n" + badgeLine
+
+	searchStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#89B4FA")).
+		Padding(0, 1).
+		Width(boxWidth)
+
+	return searchStyle.Render(boxContent)
+}
+
 func (m Model) renderSourceBadge(source string) string {
 	switch source {
 	case "bash":
-		return m.Styles.BadgeBash.Render("[bash]")
+		return m.Styles.BadgeBash.Render("[Source: bash]")
 	case "zsh":
-		return m.Styles.BadgeZsh.Render("[zsh]")
+		return m.Styles.BadgeZsh.Render("[Source: zsh]")
 	case "fish":
-		return m.Styles.BadgeFish.Render("[fish]")
+		return m.Styles.BadgeFish.Render("[Source: fish]")
 	default:
-		return m.Styles.BadgeAll.Render(fmt.Sprintf("[%s]", source))
+		return m.Styles.BadgeAll.Render(fmt.Sprintf("[Source: %s]", source))
 	}
 }
 
-func (m Model) renderTopPane(maxLines int) string {
-	contentWidth := max(20, m.Width-6)
-
-	if len(m.FilteredIndexes) == 0 {
-		var lines []string
-		lines = append(lines, m.Styles.DimmedText.Render("  No matching history commands found."))
-		for len(lines) < maxLines {
-			lines = append(lines, "")
-		}
-		return strings.Join(lines[:maxLines], "\n")
-	}
-
-	// Calculate scrolling window for top pane list
-	startIdx := 0
-	if m.SelectedIndex >= maxLines {
-		startIdx = m.SelectedIndex - maxLines + 1
-	}
-	endIdx := min(len(m.FilteredIndexes), startIdx+maxLines)
+func (m Model) renderSearchHitsBox(boxWidth int, maxLines int) string {
+	contentWidth := max(20, boxWidth-4)
 
 	var lines []string
 
-	for i := startIdx; i < endIdx; i++ {
-		itemIdx := m.FilteredIndexes[i]
-		item := m.CurrentItems[itemIdx]
-
-		isSelected := (i == m.SelectedIndex)
-
-		idxStr := fmt.Sprintf("#%-5d", item.Index+1)
-		srcBadge := fmt.Sprintf("%-6s", item.FormatSourceBadge())
-
-		timeStr := item.ShortTime()
-		if timeStr != "" {
-			timeStr = fmt.Sprintf("%-12s", timeStr)
+	if len(m.FilteredIndexes) == 0 {
+		lines = append(lines, m.Styles.DimmedText.Render("  No matching history commands found."))
+	} else {
+		startIdx := 0
+		if m.SelectedIndex >= maxLines {
+			startIdx = m.SelectedIndex - maxLines + 1
 		}
+		endIdx := min(len(m.FilteredIndexes), startIdx+maxLines)
 
-		cmdText := sanitizeCmd(item.Command)
+		for i := startIdx; i < endIdx; i++ {
+			itemIdx := m.FilteredIndexes[i]
+			item := m.CurrentItems[itemIdx]
 
-		rowStr := fmt.Sprintf("%s %s %s %s", idxStr, srcBadge, timeStr, cmdText)
-		rowStr = truncateString(rowStr, contentWidth-3)
+			isSelected := (i == m.SelectedIndex)
 
-		if isSelected {
-			selectedLine := m.Styles.SelectedItem.Width(contentWidth).Render("▸ " + rowStr)
-			lines = append(lines, selectedLine)
-		} else {
-			lines = append(lines, "  "+m.Styles.NormalItem.Render(rowStr))
+			idxStr := fmt.Sprintf("#%-5d", item.Index+1)
+			srcBadge := fmt.Sprintf("%-6s", item.FormatSourceBadge())
+
+			timeStr := item.ShortTime()
+			if timeStr != "" {
+				timeStr = fmt.Sprintf("%-12s", timeStr)
+			}
+
+			cmdText := sanitizeCmd(item.Command)
+
+			rowStr := fmt.Sprintf("%s %s %s %s", idxStr, srcBadge, timeStr, cmdText)
+			rowStr = truncateString(rowStr, contentWidth-3)
+
+			if isSelected {
+				selectedLine := m.Styles.SelectedItem.Width(contentWidth).Render("▸ " + rowStr)
+				lines = append(lines, selectedLine)
+			} else {
+				lines = append(lines, "  "+m.Styles.NormalItem.Render(rowStr))
+			}
 		}
 	}
 
-	// Fill remaining height with blank lines so height stays fixed
 	for len(lines) < maxLines {
 		lines = append(lines, "")
 	}
 
-	return strings.Join(lines[:maxLines], "\n")
+	boxContent := strings.Join(lines[:maxLines], "\n")
+
+	hitsStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#CDD6F4")).
+		Padding(0, 1).
+		Width(boxWidth)
+
+	// Add header title directly to box
+	title := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#89B4FA")).Render(" Search Hits (Use ↑ / ↓ to navigate) ")
+	_ = title
+
+	return hitsStyle.Render(boxContent)
 }
 
-func (m Model) renderContextPane(maxLines int) string {
-	contentWidth := max(20, m.Width-6)
+func (m Model) renderContextBox(boxWidth int, maxLines int) string {
+	contentWidth := max(20, boxWidth-4)
 
 	if len(m.FilteredIndexes) == 0 || m.SelectedIndex >= len(m.FilteredIndexes) {
 		var lines []string
@@ -168,15 +181,19 @@ func (m Model) renderContextPane(maxLines int) string {
 		for len(lines) < maxLines {
 			lines = append(lines, "")
 		}
-		return strings.Join(lines[:maxLines], "\n")
+		boxStyle := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#CBA6F7")).
+			Padding(0, 1).
+			Width(boxWidth)
+		return boxStyle.Render(strings.Join(lines[:maxLines], "\n"))
 	}
 
 	targetMatchIdx := m.FilteredIndexes[m.SelectedIndex]
 	targetItem := m.CurrentItems[targetMatchIdx]
 	targetHistIndex := targetItem.Index
 
-	// Title header takes 1 line
-	titleText := fmt.Sprintf("Context Window (N = %d commands before/after hit #%d)", m.ContextRadius, targetHistIndex+1)
+	titleText := fmt.Sprintf("Context Preview (%d commands BEFORE & AFTER selected hit #%d)", m.ContextRadius, targetHistIndex+1)
 	header := m.Styles.ContextTitle.Render(titleText)
 
 	var lines []string
@@ -187,7 +204,6 @@ func (m Model) renderContextPane(maxLines int) string {
 		availLinesForContext = 1
 	}
 
-	// Determine how many lines before and after we can fit
 	radius := (availLinesForContext - 1) / 2
 	if radius > m.ContextRadius {
 		radius = m.ContextRadius
@@ -235,12 +251,17 @@ func (m Model) renderContextPane(maxLines int) string {
 		}
 	}
 
-	// Fill remaining height with blank lines so height stays fixed
 	for len(lines) < maxLines {
 		lines = append(lines, "")
 	}
 
-	return strings.Join(lines[:maxLines], "\n")
+	contextStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#CBA6F7")).
+		Padding(0, 1).
+		Width(boxWidth)
+
+	return contextStyle.Render(strings.Join(lines[:maxLines], "\n"))
 }
 
 func sanitizeCmd(cmd string) string {

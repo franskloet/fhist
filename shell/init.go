@@ -8,7 +8,7 @@ func GetInitScript(shellType string) (string, error) {
 		return `# fhist bash integration (Ctrl+R replacement)
 fhist_widget() {
     local selected_cmd
-    selected_cmd=$(fhist --context 5)
+    selected_cmd=$(fhist --context 5 </dev/tty)
     if [ -n "$selected_cmd" ]; then
         READLINE_LINE="$selected_cmd"
         READLINE_POINT=${#READLINE_LINE}
@@ -21,7 +21,7 @@ bind -x '"\C-r": fhist_widget'
 		return `# fhist zsh integration (Ctrl+R replacement)
 fhist_widget() {
     local selected_cmd
-    selected_cmd=$(fhist --context 5)
+    selected_cmd=$(fhist --context 5 </dev/tty)
     if [ -n "$selected_cmd" ]; then
         BUFFER="$selected_cmd"
         CURSOR=${#BUFFER}
@@ -35,7 +35,7 @@ bindkey '^R' fhist_widget
 	case "fish":
 		return `# fhist fish integration (Ctrl+R replacement)
 function fhist_widget
-    set -l selected_cmd (fhist --context 5)
+    set -l selected_cmd (fhist --context 5 </dev/tty)
     if test -n "$selected_cmd"
         commandline -r "$selected_cmd"
     end

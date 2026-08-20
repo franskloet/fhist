@@ -41,8 +41,10 @@ func main() {
 	}
 
 	// Consolidate short/long flags
-	N := *contextRadius
-	if *contextLong != 5 {
+	N := 5
+	if *contextRadius != 5 {
+		N = *contextRadius
+	} else if *contextLong != 5 {
 		N = *contextLong
 	}
 

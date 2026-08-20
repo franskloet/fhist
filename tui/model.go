@@ -14,24 +14,24 @@ import (
 type SearchMode int
 
 const (
-	ModeFuzzy SearchMode = iota
-	ModeContains
+	ModeContains SearchMode = iota // hstr-style tokenized substring search (Default)
+	ModeFuzzy
 	ModePrefix
 	ModeRegex
 )
 
 func (m SearchMode) String() string {
 	switch m {
+	case ModeContains:
+		return "Substring"
 	case ModeFuzzy:
 		return "Fuzzy"
-	case ModeContains:
-		return "Contains"
 	case ModePrefix:
 		return "Prefix"
 	case ModeRegex:
 		return "Regex"
 	default:
-		return "Fuzzy"
+		return "Substring"
 	}
 }
 
@@ -69,7 +69,7 @@ func NewModel(store *history.HistoryStore, initialQuery string, contextRadius in
 	m := Model{
 		Store:         store,
 		ContextRadius: contextRadius,
-		SearchMode:    ModeFuzzy,
+		SearchMode:    ModeContains, // Default to hstr-style Substring search!
 		TextInput:     ti,
 		Styles:        DefaultStyles(),
 		SelectedIndex: 0,
@@ -104,24 +104,33 @@ func (m *Model) ApplyFilter() {
 	n := len(m.CurrentItems)
 
 	switch m.SearchMode {
+	case ModeContains:
+		// hstr / fzf style smart tokenized substring search
+		queryLower := strings.ToLower(query)
+		tokens := strings.Fields(queryLower)
+
+		for i := n - 1; i >= 0; i-- {
+			cmdLower := strings.ToLower(m.CurrentItems[i].Command)
+			matchAll := true
+			for _, token := range tokens {
+				if !strings.Contains(cmdLower, token) {
+					matchAll = false
+					break
+				}
+			}
+			if matchAll {
+				results = append(results, i)
+			}
+		}
+
 	case ModeFuzzy:
-		// Convert items to string slice
 		strList := make([]string, n)
 		for i, item := range m.CurrentItems {
 			strList[i] = item.Command
 		}
 		matches := fuzzy.Find(query, strList)
-		// Reverse fuzzy matches to prioritize recent matches
 		for i := len(matches) - 1; i >= 0; i-- {
 			results = append(results, matches[i].Index)
-		}
-
-	case ModeContains:
-		q := strings.ToLower(query)
-		for i := n - 1; i >= 0; i-- {
-			if strings.Contains(strings.ToLower(m.CurrentItems[i].Command), q) {
-				results = append(results, i)
-			}
 		}
 
 	case ModePrefix:
@@ -161,7 +170,7 @@ func max(a, b int) int {
 }
 
 func min(a, b int) int {
-	if a < b {
+	if a > b {
 		return a
 	}
 	return b

@@ -8,6 +8,37 @@ import (
 	"fhist/history"
 )
 
+func TestChrootSearchAccuracy(t *testing.T) {
+	store := &history.HistoryStore{
+		BashItems: []history.HistoryItem{
+			{Index: 0, Command: "cd /home/frans/Development", Source: "bash"},
+			{Index: 1, Command: "chroot /mnt /bin/bash", Source: "bash"},
+			{Index: 2, Command: "sudo chroot /target", Source: "bash"},
+			{Index: 3, Command: "cat /etc/hosts", Source: "bash"},
+			{Index: 4, Command: "echo 'hello world'", Source: "bash"},
+		},
+		ActiveSource: "bash",
+	}
+	store.RebuildAll()
+
+	m := NewModel(store, "chroot", 5)
+	if len(m.FilteredIndexes) != 2 {
+		t.Fatalf("Expected exactly 2 hits for 'chroot', got %d", len(m.FilteredIndexes))
+	}
+
+	hit1 := m.CurrentItems[m.FilteredIndexes[0]].Command
+	hit2 := m.CurrentItems[m.FilteredIndexes[1]].Command
+
+	if hit1 != "sudo chroot /target" {
+		t.Errorf("Expected first hit 'sudo chroot /target', got '%s'", hit1)
+	}
+	if hit2 != "chroot /mnt /bin/bash" {
+		t.Errorf("Expected second hit 'chroot /mnt /bin/bash', got '%s'", hit2)
+	}
+
+	fmt.Println("Chroot search test passed cleanly!")
+}
+
 func TestLongCommandLineWrapping(t *testing.T) {
 	store := &history.HistoryStore{
 		BashItems: []history.HistoryItem{

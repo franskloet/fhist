@@ -124,17 +124,23 @@ func (m Model) renderSearchHitsBox(boxWidth int, maxLines int) string {
 	if len(m.FilteredIndexes) == 0 {
 		lines = append(lines, m.Styles.DimmedText.Render("  No matching history commands found."))
 	} else {
-		startIdx := 0
-		if m.SelectedIndex >= maxLines {
-			startIdx = m.SelectedIndex - maxLines + 1
-		}
+		selIdx := min(m.SelectedIndex, len(m.FilteredIndexes)-1)
+		selIdx = max(0, selIdx)
+
+		startIdx := max(0, selIdx-maxLines+1)
 		endIdx := min(len(m.FilteredIndexes), startIdx+maxLines)
 
 		for i := startIdx; i < endIdx; i++ {
+			if i < 0 || i >= len(m.FilteredIndexes) {
+				continue
+			}
 			itemIdx := m.FilteredIndexes[i]
+			if itemIdx < 0 || itemIdx >= len(m.CurrentItems) {
+				continue
+			}
 			item := m.CurrentItems[itemIdx]
 
-			isSelected := (i == m.SelectedIndex)
+			isSelected := (i == selIdx)
 
 			idxStr := fmt.Sprintf("#%-5d", item.Index+1)
 			srcBadge := fmt.Sprintf("%-6s", item.FormatSourceBadge())
@@ -187,7 +193,10 @@ func (m Model) renderContextBox(boxWidth int, maxLines int) string {
 		Padding(0, 1).
 		Width(boxWidth)
 
-	if len(m.FilteredIndexes) == 0 || m.SelectedIndex >= len(m.FilteredIndexes) {
+	selIdx := min(m.SelectedIndex, len(m.FilteredIndexes)-1)
+	selIdx = max(0, selIdx)
+
+	if len(m.FilteredIndexes) == 0 || selIdx >= len(m.FilteredIndexes) {
 		var lines []string
 		lines = append(lines, m.Styles.DimmedText.Render("No context available."))
 		for len(lines) < maxLines {
@@ -196,7 +205,7 @@ func (m Model) renderContextBox(boxWidth int, maxLines int) string {
 		return boxStyle.Render(strings.Join(lines[:maxLines], "\n"))
 	}
 
-	targetMatchIdx := m.FilteredIndexes[m.SelectedIndex]
+	targetMatchIdx := m.FilteredIndexes[selIdx]
 	targetItem := m.CurrentItems[targetMatchIdx]
 	targetHistIndex := targetItem.Index
 
@@ -220,6 +229,9 @@ func (m Model) renderContextBox(boxWidth int, maxLines int) string {
 	endHistIndex := min(len(m.CurrentItems)-1, targetHistIndex+radius)
 
 	for i := startHistIndex; i <= endHistIndex; i++ {
+		if i < 0 || i >= len(m.CurrentItems) {
+			continue
+		}
 		item := m.CurrentItems[i]
 		offset := i - targetHistIndex
 
